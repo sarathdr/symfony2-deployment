@@ -1,0 +1,78 @@
+#!/usr/bin/env php
+<?php
+use Symfony\Component\ClassLoader\UniversalClassLoader;
+require_once dirname(__FILE__).'/vendor/symfony/symfony/src/Symfony/Component/ClassLoader/UniversalClassLoader.php';
+
+$loader = new UniversalClassLoader();
+$loader->register();
+
+$loader->registerNamespaces(array(
+    'Symfony' => dirname(__FILE__).'/vendor/symfony/symfony/src',
+));
+
+use Symfony\Component\Yaml\Parser;
+
+
+// php symfony project:deploy preprod -t  
+$yaml = new Parser();
+$array = $yaml->parse(file_get_contents(dirname(__FILE__).'/app/config/properties.yml'));
+
+if( isset( $argv[1]) &&  $argv[1] == 'project:deploy' ){
+	if( isset($array[$argv[2]]) ){
+	
+		$settings = $array[$argv[2]]; 	
+		$serverString = getServerString($settings); 
+		
+		$rsync = "rsync -azC --force --delete --progress --exclude-from=app/config/rsync_exclude.txt ";
+		if( isset( $argv[3] ) ){
+			if( $argv[3] == "-t" ){
+				$rsync .= "--dry-run "; 
+			}
+			
+			$cmd = $rsync.$serverString;
+			
+			echo "\n>> exec ". $cmd ."\n";
+			
+			
+			
+		    $descriptorspec = array(
+		         1 => array('pipe', 'w'), // stdout
+		         2 => array('pipe', 'w'), // stderr
+		       );
+
+		       $process = proc_open($cmd, $descriptorspec, $pipes);
+		       if (!is_resource($process))
+		       {
+		         throw new RuntimeException('Unable to execute the command.');
+		       }
+
+			   echo stream_get_contents($pipes[1]);
+			   echo stream_get_contents($pipes[2]);
+			   fclose($pipes[1]);
+			   fclose($pipes[2]);
+			
+			
+			
+		}else{
+			echo "\n Missing configuration \n";
+		}
+		
+	}else{
+		echo "\n Missing configuration \n";
+	}
+}else{
+	echo "\n Missing parameter \n";
+}
+
+function getServerString( $settings ){
+	
+	$ssh = 'ssh';
+	if( isset($settings["port"])  ) {
+		$ssh = '"ssh -p'.$settings["port"].'"';
+	}
+	if( isset($settings["user"])  && isset($settings["host"]) ){
+		return ' -e '.$ssh.' ./ '.$settings["user"].'@'.$settings["host"].':'.$settings["dir"]; 
+	}
+
+}
+?>
